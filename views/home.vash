@@ -1,0 +1,17 @@
+<html>
+  <head>
+    <title>@model.title</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <img src="/ss/@model.pageId/@model.imgId" usemap="#workmap">
+    <map name="workmap">
+      @model.coordinates.forEach(function (item) {
+        <area shape="RECT" coords="@item.area" href="/@model.pageId?url=@model.url&click=@item.click" />
+      })
+    </map>
+  </body>
+  <script>
+  </script>
+</html>
