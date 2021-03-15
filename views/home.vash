@@ -1,17 +1,25 @@
 <html>
   <head>
-    <title>@model.title</title>
-    <meta name="description" content="" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title></title>
   </head>
   <body>
-    <img src="/ss/@model.pageId/@model.imgId" usemap="#workmap">
-    <map name="workmap">
-      @model.coordinates.forEach(function (item) {
-        <area shape="RECT" coords="@item.area" href="/@model.pageId?url=@model.url&click=@item.click" />
-      })
-    </map>
+    <form name="navigatonForm" action="/" method="POST">
+      <label for="url">Last name:</label><br>
+      <input type="text" id="url" name="url" value="http://www.google.com"><br><br>
+      <input type="hidden" id="pageWidth" name="pageWidth">
+      <input type="hidden" id="pageHeight" name="pageHeight">
+      <input type="submit" value="Submit">
+    </form>
   </body>
   <script>
+    document.forms.navigatonForm.pageHeight.value = window.innerHeight;
+    document.forms.navigatonForm.pageWidth.value = window.innerWidth;
+
+    var expdate = new Date()
+    cookieExpires = new Date();
+    cookieExpires.setTime (expdate.getTime() + 1 * (24 * 60 * 60 * 1000)) //+1 day
+    var experies = cookieExpires.toGMTString()
+    var cookieName = "resolution";
+    document.cookie = cookieName + "=" + window.innerWidth + "x" + window.innerHeight + "; expires=" + cookieExpires;
   </script>
 </html>

@@ -1,0 +1,36 @@
+<html>
+  <head>
+    <title>@model.title</title>
+    <meta name="description" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body BGCOLOR="white" marginwidth="0" leftmargin="0" marginheight="0" hspace="0" style="margin-left:0; margin-right:0; margin-top: 0">
+    <layer z-index=1 top="0" bottom="0" left="0" right="0" vspace="0" hspace="0" width="100%" height="100%">
+      <a href="/click/@model.pageId">
+        <img src="/ss/@model.pageId/@model.imgId" border="0" ismap>
+      </a>
+    </layer>
+    @if (model.isTypeMode) {
+      <layer name="typeform" z-index=1 bottom="0" left="0" right="0" vspace="0" hspace="0" bgcolor="#DDDDDD" width="100%">
+        <form action="/type/@model.pageId" method="POST">
+          <label for="usertext">Type:</label><br>
+          <input type="text" id="usertext" name="usertext">
+          <input type="submit" value="Type!">
+        </form>
+      </layer>
+    }
+  </body>
+  <script>
+    var expdate = new Date()
+    cookieExpires = new Date();
+    cookieExpires.setTime (expdate.getTime() + 1 * (24 * 60 * 60 * 1000)) //+1 day
+    var experies = cookieExpires.toGMTString()
+    var cookieName = "resolution";
+    document.cookie = cookieName + "=" + window.innerWidth + "x" + window.innerHeight + "; expires=" + cookieExpires;
+
+    if (document.typeform) {
+      var top = window.innerHeight - document.typeform.document.height;
+      document.typeform.top = top;
+    }
+  </script>
+</html>
