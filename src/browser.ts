@@ -92,7 +92,7 @@ export async function click(id: string, x: number, y: number) {
 
 export async function goBack(id: string) {
   const { page } = await getPage(id);
-  const history = await page.send("Page.getNavigationHistory");
+  const history = await page.send("Page.getNavigationHistory", {});
   console.log(history.entries);
   await page.send("Page.navigateToHistoryEntry", {
     entryId: history.entries[history.currentIndex - 1].id,
