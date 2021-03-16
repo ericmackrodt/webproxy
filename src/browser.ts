@@ -1,22 +1,28 @@
-import * as puppeteer from "puppeteer";
-import { Browser, Page } from "puppeteer";
+// import * as puppeteer from "puppeteer";
+// import { Browser, Page } from "puppeteer";
 import * as pixelmatch from "pixelmatch";
 import { PNG, PNGWithMetadata } from "pngjs";
 
-let browser: Browser;
+import {
+  spawnChrome,
+  ChromeWithPipeConnection,
+  RootConnection,
+  SessionConnection,
+} from "chrome-debugging-client";
 
-const pages: Record<string, Page> = {};
+let chrome: ChromeWithPipeConnection;
+let browser: RootConnection;
+
+const pages: Record<string, SessionConnection> = {};
 const pageScreenshots: Record<string, PNGWithMetadata> = {};
 
 export async function initialize() {
-  browser = await puppeteer.launch({
-    headless: false,
-    ignoreDefaultArgs: ["--hide-scrollbars"],
-  });
+  chrome = spawnChrome({ headless: false });
+  browser = chrome.connection;
 }
 
 export async function getPage(
-  id: string,
+  id?: string,
   width: number = 800,
   height: number = 600
 ) {
@@ -25,77 +31,132 @@ export async function getPage(
   if (!page) {
     width = Math.max(width, 1) - 4; // for netscape;
     height = Math.max(height, 1) - 4; // for nestcape;
-    page = pages[id] = await browser.newPage();
-    page.setViewport({ height, width });
+    const { targetId } = await browser.send("Target.createTarget", {
+      url: "about:blank",
+    });
+    page = pages[id] = await browser.attachToTarget(targetId);
+    await page.send("Page.enable");
+    id = targetId;
+    await page.send("Page.setDeviceMetricsOverride", {
+      height,
+      width,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+    // page.setViewport({ height, width });
   }
 
-  return page;
+  return { id, page };
+}
+
+export async function navigate(id: string, url: string) {
+  const { page } = await getPage(id);
+  return Promise.all([
+    page.until("Page.loadEventFired"),
+    page.send("Page.navigate", { url }),
+  ]);
+}
+
+export async function screenshot(id: string, format: string = "jpeg") {
+  const { page } = await getPage(id);
+  const ss = await page.send("Page.captureScreenshot", {
+    quality: format === "png" ? undefined : 100,
+    format,
+  });
+  return Buffer.from(ss.data, "base64");
+}
+
+export async function click(id: string, x: number, y: number) {
+  const { page } = await getPage(id);
+  // await page.send("Runtime.evaluate", {
+  //   awaitPromise: true,
+  //   expression: `document.elementFromPoint(${x}, ${y}).click();`,
+  // });
+
+  await page.send("Input.dispatchMouseEvent", { x, y, type: "mouseMoved" });
+  await page.send("Input.dispatchMouseEvent", {
+    x,
+    y,
+    type: "mousePressed",
+    button: "left",
+    clickCount: 1,
+  });
+  await page.send("Input.dispatchMouseEvent", {
+    x,
+    y,
+    type: "mouseReleased",
+    button: "left",
+    clickCount: 1,
+  });
+}
+
+export async function goBack(id: string) {
+  const { page } = await getPage(id);
+  const history = await page.send("Page.getNavigationHistory");
+  console.log(history.entries);
+  await page.send("Page.navigateToHistoryEntry", {
+    entryId: history.entries[history.currentIndex - 1].id,
+  });
 }
 
 export async function isTextfieldFocused(id: string) {
-  const page = await getPage(id);
-  const focused = await page.$(":focus");
-  return !!focused;
+  // const page = await getPage(id);
+  // const focused = await page.$(":focus");
+  return false;
 }
 
-export async function getCurrentCoordinates(
-  id: string
-): Promise<
-  | {
-      area: string;
-      click: string;
-    }[]
-  | undefined
-> {
-  const page = await getPage(id);
-  try {
-    const inputs = await page.$$("input");
-    const buttons = await page.$$("button");
-    const hyperlink = await page.$$("a");
-    const others = await page.$$("[role=button]");
+// export async function getCurrentCoordinates(
+//   id: string
+// ): Promise<
+//   | {
+//       area: string;
+//       click: string;
+//     }[]
+//   | undefined
+// > {
+//   const page = await getPage(id);
+//   try {
+//     const inputs = await page.$$("input");
+//     const buttons = await page.$$("button");
+//     const hyperlink = await page.$$("a");
+//     const others = await page.$$("[role=button]");
 
-    const boundingBoxes = await Promise.all([
-      ...inputs.map((button) => button.boundingBox()),
-      ...buttons.map((button) => button.boundingBox()),
-      ...hyperlink.map((button) => button.boundingBox()),
-      ...others.map((button) => button.boundingBox()),
-    ]);
+//     const boundingBoxes = await Promise.all([
+//       ...inputs.map((button) => button.boundingBox()),
+//       ...buttons.map((button) => button.boundingBox()),
+//       ...hyperlink.map((button) => button.boundingBox()),
+//       ...others.map((button) => button.boundingBox()),
+//     ]);
 
-    return boundingBoxes
-      .filter((o) => !!o)
-      .map((box) => ({
-        area: [
-          Math.floor(box.x),
-          Math.floor(box.y),
-          Math.ceil(box.x + box.width),
-          Math.ceil(box.y + box.height),
-        ].join(","),
-        click: [box.x + box.width / 2, box.y + box.height / 2].join(","),
-      }));
-  } catch (_) {
-    try {
-      await page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: 10000,
-      });
-    } catch (_) {}
-    return getCurrentCoordinates(id);
-  }
-}
+//     return boundingBoxes
+//       .filter((o) => !!o)
+//       .map((box) => ({
+//         area: [
+//           Math.floor(box.x),
+//           Math.floor(box.y),
+//           Math.ceil(box.x + box.width),
+//           Math.ceil(box.y + box.height),
+//         ].join(","),
+//         click: [box.x + box.width / 2, box.y + box.height / 2].join(","),
+//       }));
+//   } catch (_) {
+//     try {
+//       await page.waitForNavigation({
+//         waitUntil: "networkidle2",
+//         timeout: 10000,
+//       });
+//     } catch (_) {}
+//     return getCurrentCoordinates(id);
+//   }
+// }
 
 export async function close() {
-  await browser.close();
+  await browser.send("Browser.close");
 }
 
 export async function waitChangingPage(id: string) {
-  const page = await getPage(id);
-
   if (!pageScreenshots[id]) {
-    const ss = (await page.screenshot({
-      // quality: 100,
-      encoding: "binary",
-      type: "png",
-    })) as Buffer;
+    const ss = (await screenshot(id, "png")) as Buffer;
 
     pageScreenshots[id] = PNG.sync.read(ss);
   }
@@ -105,11 +166,7 @@ export async function waitChangingPage(id: string) {
 
   return new Promise((resolve) => {
     async function test() {
-      const currentSS = (await page.screenshot({
-        // quality: 100,
-        encoding: "binary",
-        type: "png",
-      })) as Buffer;
+      const currentSS = (await screenshot(id, "png")) as Buffer;
 
       // const diff = {
       //   data: new Buffer([]),
@@ -139,7 +196,7 @@ export async function waitChangingPage(id: string) {
 
         console.log("same timeout", sameTimeout);
 
-        if (sameTimeout >= 2) {
+        if (sameTimeout >= 3) {
           console.log("same timeout completed");
           resolve(null);
 
@@ -164,7 +221,7 @@ export async function waitChangingPage(id: string) {
 
       setTimeout(() => {
         test();
-      }, 100);
+      }, 50);
     }
     test();
   });
