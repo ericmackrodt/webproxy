@@ -1,10 +1,10 @@
 import { initialize } from "./browser";
 import app from "./server";
 
-const port = process.env.PORT || 3001;
+const port = parseInt(process.env.PORT) || 3001;
 
 initialize().then(() => {
-  app.listen(port, () =>
+  app.listen(port, "0.0.0.0", 0, () =>
     console.log(`Example app listening at http://localhost:${port}`)
   );
 });

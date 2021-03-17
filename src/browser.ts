@@ -163,6 +163,7 @@ export async function waitChangingPage(id: string) {
 
   let sameTimeout = 0;
   let differentTimeout = 0;
+  let generalTimout = 0;
 
   return new Promise((resolve) => {
     async function test() {
@@ -189,6 +190,14 @@ export async function waitChangingPage(id: string) {
       );
 
       console.log(mismatched);
+
+      generalTimout++;
+
+      if (generalTimout >= 100) {
+        console.log("general timeout reached");
+        resolve(null);
+        return;
+      }
 
       if (mismatched <= 1) {
         sameTimeout++;

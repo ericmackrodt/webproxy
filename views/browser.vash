@@ -21,6 +21,7 @@
     }
   </body>
   <script>
+
     var expdate = new Date()
     cookieExpires = new Date();
     cookieExpires.setTime (expdate.getTime() + 1 * (24 * 60 * 60 * 1000)) //+1 day
@@ -33,15 +34,5 @@
       var top = window.innerHeight - document.typeform.document.height;
       document.typeform.top = top;
     }
-
-    window.addEventListener( "pageshow", function ( event ) {
-    var historyTraversal = event.persisted || 
-                          ( typeof window.performance != "undefined" && 
-                                window.performance.navigation.type === 2 );
-    if ( historyTraversal ) {
-      // Handle page restore.
-      window.location.reload();
-    }
-  });
   </script>
 </html>
