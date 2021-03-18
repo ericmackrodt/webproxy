@@ -19,6 +19,7 @@
     "body-parser": "^1.19.0",
     "chrome-debugging-client": "^2.0.0",
     "cookie-parser": "^1.4.5",
+    "devtools-protocol": "^0.0.862770",
     "express": "^4.17.1",
     "pixelmatch": "^5.2.1",
     "pngjs": "^6.0.0",

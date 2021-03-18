@@ -1,8 +1,3 @@
-// import * as puppeteer from "puppeteer";
-// import { Browser, Page } from "puppeteer";
-import * as pixelmatch from "pixelmatch";
-import { PNG, PNGWithMetadata } from "pngjs";
-
 import {
   spawnChrome,
   ChromeWithPipeConnection,
@@ -13,44 +8,53 @@ import {
 let chrome: ChromeWithPipeConnection;
 let browser: RootConnection;
 
-const pages: Record<string, SessionConnection> = {};
-const pageScreenshots: Record<string, PNGWithMetadata> = {};
+type PageInfo = {
+  width: number;
+  height: number;
+  page: SessionConnection;
+};
+
+const pages: Record<string, PageInfo | undefined> = {};
 
 export async function initialize() {
   chrome = spawnChrome({ headless: false });
   browser = chrome.connection;
 }
 
-export async function getPage(
-  id?: string,
-  width: number = 800,
-  height: number = 600
-) {
-  let page = pages[id];
+export async function newPage(width: number = 800, height: number = 600) {
+  width = Math.max(width, 1) - 4; // for netscape;
+  height = Math.max(height, 1) - 4; // for nestcape;
 
-  if (!page) {
-    width = Math.max(width, 1) - 4; // for netscape;
-    height = Math.max(height, 1) - 4; // for nestcape;
-    const { targetId } = await browser.send("Target.createTarget", {
-      url: "about:blank",
-    });
-    page = pages[id] = await browser.attachToTarget(targetId);
-    await page.send("Page.enable");
-    id = targetId;
-    await page.send("Page.setDeviceMetricsOverride", {
-      height,
-      width,
-      deviceScaleFactor: 1,
-      mobile: false,
-    });
-    // page.setViewport({ height, width });
-  }
+  console.log(width, height);
+  const { targetId } = await browser.send("Target.createTarget", {
+    url: "about:blank",
+  });
 
-  return { id, page };
+  const page = await browser.attachToTarget(targetId);
+
+  pages[targetId] = {
+    page,
+    width,
+    height,
+  };
+
+  await page.send("Emulation.setDeviceMetricsOverride", {
+    height,
+    width,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
+  await page.send("Page.enable");
+
+  return targetId;
+}
+
+export async function getPage(id?: string) {
+  return pages[id] && pages[id].page;
 }
 
 export async function navigate(id: string, url: string) {
-  const { page } = await getPage(id);
+  const page = await getPage(id);
   return Promise.all([
     page.until("Page.loadEventFired"),
     page.send("Page.navigate", { url }),
@@ -58,16 +62,16 @@ export async function navigate(id: string, url: string) {
 }
 
 export async function screenshot(id: string, format: string = "jpeg") {
-  const { page } = await getPage(id);
+  const page = await getPage(id);
   const ss = await page.send("Page.captureScreenshot", {
-    quality: format === "png" ? undefined : 100,
+    quality: format === "png" ? undefined : 50,
     format,
   });
   return Buffer.from(ss.data, "base64");
 }
 
 export async function click(id: string, x: number, y: number) {
-  const { page } = await getPage(id);
+  const page = await getPage(id);
   // await page.send("Runtime.evaluate", {
   //   awaitPromise: true,
   //   expression: `document.elementFromPoint(${x}, ${y}).click();`,
@@ -91,7 +95,7 @@ export async function click(id: string, x: number, y: number) {
 }
 
 export async function goBack(id: string) {
-  const { page } = await getPage(id);
+  const page = await getPage(id);
   const history = await page.send("Page.getNavigationHistory", {});
   console.log(history.entries);
   await page.send("Page.navigateToHistoryEntry", {
@@ -100,138 +104,84 @@ export async function goBack(id: string) {
 }
 
 export async function isTextfieldFocused(id: string) {
-  // const page = await getPage(id);
-  // const focused = await page.$(":focus");
-  return false;
+  const page = await getPage(id);
+
+  const { result } = await page.send("Runtime.evaluate", {
+    expression: "document.activeElement",
+  });
+
+  return (
+    result.className === "HTMLInputElement" ||
+    result.className === "HTMLTextAreaElement"
+  );
 }
 
-// export async function getCurrentCoordinates(
-//   id: string
-// ): Promise<
-//   | {
-//       area: string;
-//       click: string;
-//     }[]
-//   | undefined
-// > {
-//   const page = await getPage(id);
-//   try {
-//     const inputs = await page.$$("input");
-//     const buttons = await page.$$("button");
-//     const hyperlink = await page.$$("a");
-//     const others = await page.$$("[role=button]");
+let codes: string[] = [];
+let isTyping = false;
 
-//     const boundingBoxes = await Promise.all([
-//       ...inputs.map((button) => button.boundingBox()),
-//       ...buttons.map((button) => button.boundingBox()),
-//       ...hyperlink.map((button) => button.boundingBox()),
-//       ...others.map((button) => button.boundingBox()),
-//     ]);
+export async function typeText(id: string, keys: string | string[]) {
+  const page = await getPage(id);
 
-//     return boundingBoxes
-//       .filter((o) => !!o)
-//       .map((box) => ({
-//         area: [
-//           Math.floor(box.x),
-//           Math.floor(box.y),
-//           Math.ceil(box.x + box.width),
-//           Math.ceil(box.y + box.height),
-//         ].join(","),
-//         click: [box.x + box.width / 2, box.y + box.height / 2].join(","),
-//       }));
-//   } catch (_) {
-//     try {
-//       await page.waitForNavigation({
-//         waitUntil: "networkidle2",
-//         timeout: 10000,
-//       });
-//     } catch (_) {}
-//     return getCurrentCoordinates(id);
-//   }
-// }
+  const newKeys = keys instanceof Array ? keys : keys.split(",");
+
+  codes = [...codes, ...newKeys];
+
+  console.log(codes);
+
+  if (isTyping) {
+    return;
+  }
+
+  isTyping = true;
+
+  while (codes.length) {
+    const code = parseInt(codes.shift());
+    const key = String.fromCharCode(code);
+    console.log(code);
+    const event = {
+      modifiers: 0,
+      text: key,
+      unmodifiedText: key,
+      key: key,
+      windowsVirtualKeyCode: code,
+    };
+    await page.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      ...event,
+    });
+    await page.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      ...event,
+    });
+  }
+
+  isTyping = false;
+}
 
 export async function close() {
   await browser.send("Browser.close");
 }
 
-export async function waitChangingPage(id: string) {
-  if (!pageScreenshots[id]) {
-    const ss = (await screenshot(id, "png")) as Buffer;
+export async function waitForPageLoaded(id: string) {
+  const page = await getPage(id);
+  await page.until("Page.loadEventFired");
+}
 
-    pageScreenshots[id] = PNG.sync.read(ss);
+export async function resizeBrowser(id: string, width: number, height: number) {
+  const page = await getPage(id);
+
+  const viewport = pages[id];
+
+  if (viewport.height !== height && viewport.width !== width) {
+    console.log("resolution changed");
+    await page.send("Emulation.setDeviceMetricsOverride", {
+      height,
+      width,
+      deviceScaleFactor: 1,
+      mobile: false,
+    });
+
+    viewport.height = height;
+    viewport.width = width;
   }
-
-  let sameTimeout = 0;
-  let differentTimeout = 0;
-  let generalTimout = 0;
-
-  return new Promise((resolve) => {
-    async function test() {
-      const currentSS = (await screenshot(id, "png")) as Buffer;
-
-      // const diff = {
-      //   data: new Buffer([]),
-      // };
-
-      const previous = pageScreenshots[id];
-      const current = PNG.sync.read(currentSS);
-
-      const { width, height } = previous;
-
-      const mismatched = pixelmatch(
-        previous.data,
-        current.data,
-        null,
-        width,
-        height,
-        {
-          threshold: 0.1,
-        }
-      );
-
-      console.log(mismatched);
-
-      generalTimout++;
-
-      if (generalTimout >= 100) {
-        console.log("general timeout reached");
-        resolve(null);
-        return;
-      }
-
-      if (mismatched <= 1) {
-        sameTimeout++;
-        differentTimeout = 0;
-
-        console.log("same timeout", sameTimeout);
-
-        if (sameTimeout >= 3) {
-          console.log("same timeout completed");
-          resolve(null);
-
-          return;
-        }
-      }
-
-      if (mismatched >= 2) {
-        sameTimeout = 0;
-        differentTimeout++;
-
-        pageScreenshots[id] = current;
-
-        console.log("different timeout");
-        if (differentTimeout >= 50) {
-          console.log("different timeout completed");
-          resolve(null);
-
-          return;
-        }
-      }
-
-      setTimeout(() => {
-        test();
-      }, 50);
-    }
-    test();
-  });
 }

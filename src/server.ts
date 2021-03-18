@@ -10,8 +10,10 @@ import {
   goBack,
   isTextfieldFocused,
   navigate,
+  newPage,
+  resizeBrowser,
   screenshot,
-  waitChangingPage,
+  typeText,
 } from "./browser";
 
 const app = express();
@@ -34,20 +36,10 @@ app.use(cookieParser());
 
 app.use("/assets", express.static("assets"));
 
-app.use((_, res, next) => {
-  res.setHeader("Expires", "Mon, 26 Jul 1997 05:00:00 GMT");
-  // always modified right now
-  // res.setHeader("Last-Modified",   . gmdate("D, d M Y H:i:s") . " GMT");
-  // HTTP/1.1
-  res.setHeader(
-    "Cache-Control",
-    "private, no-store, max-age=0, no-cache, must-revalidate, post-check=0, pre-check=0"
-  );
-  // HTTP/1.0
-  res.setHeader("Pragma", "no-cache");
+// app.use((_, res, next) => {
 
-  next();
-});
+//   next();
+// });
 
 app.get("/", async (req, res) => {
   res.render("home", {});
@@ -56,13 +48,16 @@ app.get("/", async (req, res) => {
 app.post("/", async (req, res) => {
   const { url } = req.body;
   const { resolution } = req.cookies;
-  // const id = v4();
+
+  console.log(req.body);
+
+  console.log(req.cookies);
 
   const [width, height] = (resolution as string)
     .split("x")
     .map((o) => parseFloat(o));
 
-  const { id } = await getPage(undefined, width, height);
+  const id = await newPage(width, height);
   await navigate(id, url);
   redirect(res, id, url);
 });
@@ -71,23 +66,16 @@ app.post("/", async (req, res) => {
 //   const { id } = req.params;
 //   const { usertext } = req.body;
 
-//   const page = await getPage(id);
+//   console.log(usertext);
+//   await setText(id, usertext);
 
-//   await page.keyboard.type(usertext);
-
-//   const url = page.url();
-//   const query = qs.stringify({
-//     url,
-//   });
-
-//   const redirect = `/${id}?${query}`;
-//   res.redirect(redirect);
+//   redirect(res, id);
 // });
 
 app.get("/click/:id", async (req, res) => {
   const { id } = req.params;
 
-  const { page } = await getPage(id);
+  const page = await getPage(id);
 
   const [x, y] = Object.keys(req.query)[0]
     .split(",")
@@ -100,6 +88,17 @@ app.get("/click/:id", async (req, res) => {
 });
 
 app.get("/:id/:num", async (req, res) => {
+  res.setHeader("Expires", "Mon, 26 Jul 1997 05:00:00 GMT");
+  // always modified right now
+  // res.setHeader("Last-Modified",   . gmdate("D, d M Y H:i:s") . " GMT");
+  // HTTP/1.1
+  res.setHeader(
+    "Cache-Control",
+    "private, no-store, max-age=0, no-cache, must-revalidate, post-check=0, pre-check=0"
+  );
+  // HTTP/1.0
+  res.setHeader("Pragma", "no-cache");
+
   const { id, num } = req.params;
 
   const n = parseInt(num);
@@ -118,9 +117,9 @@ app.get("/:id/:num", async (req, res) => {
   width = Math.max(width, 1) - 4; // for netscape;
   height = Math.max(height, 1) - 4; // for nestcape;
 
-  console.log("navigated");
+  await resizeBrowser(id, width, height);
 
-  const { page } = await getPage(id, width, height);
+  const page = await getPage(id);
 
   // await page.waitForTimeout(500);
 
@@ -128,9 +127,11 @@ app.get("/:id/:num", async (req, res) => {
 
   // page.setViewport({ width, height });
 
-  console.log("start chaning");
-  await waitChangingPage(id);
-  console.log("finish chaning");
+  // console.log("start chaning");
+  // await waitForPageLoaded(id);
+  // console.log("page loaded!");
+  // await waitChangingPage(id);
+  // console.log("finish chaning");
   res.render("browser", {
     url: page.targetInfo.url,
     pageId: id,
@@ -143,6 +144,11 @@ app.get("/:id/:num", async (req, res) => {
 app.get("/ss/:id/*", async (req, res) => {
   const { id } = req.params;
   const { resolution } = req.cookies;
+  const { keypresses } = req.query;
+
+  if (keypresses) {
+    typeText(id, keypresses as string);
+  }
 
   let [width, height] = (resolution as string)
     .split("x")
