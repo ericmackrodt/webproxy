@@ -63,9 +63,16 @@ export async function navigate(id: string, url: string) {
 
 export async function screenshot(id: string, format: string = "jpeg") {
   const page = await getPage(id);
+  const { width, height } = pages[id];
   const ss = await page.send("Page.captureScreenshot", {
     quality: format === "png" ? undefined : 50,
     format,
+  });
+  page.send("Emulation.setDeviceMetricsOverride", {
+    height,
+    width,
+    deviceScaleFactor: 1,
+    mobile: false,
   });
   return Buffer.from(ss.data, "base64");
 }
@@ -76,6 +83,14 @@ export async function click(id: string, x: number, y: number) {
   //   awaitPromise: true,
   //   expression: `document.elementFromPoint(${x}, ${y}).click();`,
   // });
+  const { width, height } = pages[id];
+
+  await page.send("Emulation.setDeviceMetricsOverride", {
+    height,
+    width,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
 
   await page.send("Input.dispatchMouseEvent", { x, y, type: "mouseMoved" });
   await page.send("Input.dispatchMouseEvent", {
